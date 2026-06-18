@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Birthday Universe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#05030d;
+    --violet:#a78bfa;
+    --cyan:#22d3ee;
+    --pink:#f472b6;
+    --gold:#fbbf24;
+    --ui-line: rgba(167,139,250,0.35);
+    --font-display: 'Cormorant Garamond', serif;
+    --font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, monospace;
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background:var(--bg); color:#eae6ff;
+    font-family: var(--font-mono);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  #app{ position:fixed; inset:0; }
+  canvas#scene{ position:absolute; inset:0; display:block; outline:none; }
+
+  /* ===================== LOADING / TERMINAL ===================== */
+  #terminal-screen{
+    position:fixed; inset:0; z-index:50;
+    display:flex; align-items:center; justify-content:center;
+    background: radial-gradient(ellipse at 50% 40%, #0a0618 0%, #050309 70%, #020103 100%);
+  }
+  #terminal-box{
+    width:min(640px, 86vw);
+    border:1px solid var(--ui-line);
+    background: rgba(10,8,20,0.55);
+    backdrop-filter: blur(6px);
+    border-radius:6px;
+    padding:28px 30px;
+    box-shadow: 0 0 60px rgba(167,139,250,0.08), inset 0 0 40px rgba(167,139,250,0.03);
+  }
+  #terminal-header{
+    display:flex; align-items:center; gap:8px;
+    margin-bottom:16px; opacity:0.6; font-size:11px; letter-spacing:0.12em;
+  }
+  #terminal-header span{
+    width:8px; height:8px; border-radius:50%; background:var(--ui-line);
+  }
+  #terminal-lines{
+    font-size:13px; line-height:1.9; letter-spacing:0.02em; color:#c9c2f0;
+    min-height:160px;
+  }
+  #terminal-lines .line{ opacity:0; animation: fadeIn 0.4s forwards; white-space:pre-wrap; }
+  #terminal-lines .ok{ color:var(--cyan); }
+  .cursor{ display:inline-block; width:7px; height:14px; background:var(--violet); margin-left:4px; animation: blink 1s step-end infinite; vertical-align:middle; }
+  @keyframes blink{ 50%{ opacity:0; } }
+  @keyframes fadeIn{ to{ opacity:1; } }
+
+  #enter-btn{
+    margin-top:22px; width:100%; padding:13px 0;
+    background:transparent; border:1px solid var(--violet); color:#e9e4ff;
+    font-family:var(--font-mono); font-size:12px; letter-spacing:0.18em; text-transform:uppercase;
+    border-radius:4px; cursor:pointer; opacity:0; pointer-events:none;
+    transition: all 0.5s ease, background 0.2s, color 0.2s;
+  }
+  #enter-btn.show{ opacity:1; pointer-events:auto; }
+  #enter-btn:hover{ background:var(--violet); color:#0a0618; }
+
+  /* ===================== HUD ===================== */
+  #hud{
+    position:fixed; inset:0; pointer-events:none; z-index:20;
+    opacity:0; transition: opacity 1.2s ease;
+  }
+  #hud.visible{ opacity:1; }
+
+  #hud-top{
+    position:absolute; top:18px; left:18px; right:18px;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:#a89fd8;
+  }
+  #hud-title{ opacity:0.85; }
+  #hud-title b{ color:var(--violet); font-weight:600; }
+
+  #progress-wrap{
+    display:flex; flex-direction:column; align-items:flex-end; gap:4px;
+  }
+  #progress-track{
+    width:130px; height:3px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden;
+  }
+  #progress-fill{ height:100%; width:0%; background:linear-gradient(90deg, var(--violet), var(--pink)); transition: width 0.4s ease; }
+
+  #crosshair{
+    position:absolute; top:50%; left:50%; width:6px; height:6px;
+    transform:translate(-50%,-50%);
+    border:1px solid rgba(234,230,255,0.5); border-radius:50%;
+  }
+
+  #hint-bar{
+    position:absolute; bottom:18px; left:0; right:0;
+    display:flex; justify-content:center;
+    font-size:10.5px; letter-spacing:0.08em; color:#9b91c9; text-align:center;
+    transition: opacity 0.6s ease;
+  }
+  #hint-bar span{ padding:0 10px; border-right:1px solid rgba(255,255,255,0.12); }
+  #hint-bar span:last-child{ border-right:none; }
+
+  #core-prompt{
+    position:absolute; bottom:64px; left:50%; transform:translate(-50%, 10px);
+    font-size:11px; letter-spacing:0.12em; color:var(--gold);
+    text-transform:uppercase; opacity:0; transition: opacity 0.6s ease, transform 0.6s ease;
+    pointer-events:none; text-align:center;
+  }
+  #core-prompt.show{ opacity:1; transform:translate(-50%, 0); }
+
+  /* mobile joystick */
+  #touch-controls{ display:none; position:absolute; inset:0; pointer-events:none; }
+  #joystick-zone{
+    position:absolute; left:22px; bottom:26px; width:120px; height:120px;
+    border-radius:50%; border:1px solid rgba(255,255,255,0.18);
+    background:rgba(255,255,255,0.03); pointer-events:auto;
+  }
+  #joystick-knob{
+    position:absolute; top:50%; left:50%; width:50px; height:50px; margin:-25px 0 0 -25px;
+    border-radius:50%; background:rgba(167,139,250,0.35); border:1px solid rgba(255,255,255,0.3);
+  }
+  #boost-btn{
+    position:absolute; right:24px; bottom:34px; width:74px; height:74px; border-radius:50%;
+    border:1px solid rgba(255,255,255,0.25); background:rgba(244,114,182,0.12);
+    color:#f3eaff; font-size:9.5px; letter-spacing:0.08em; text-transform:uppercase;
+    display:flex; align-items:center; justify-content:center; pointer-events:auto;
+  }
+  #vlook-zone{ position:absolute; right:0; top:0; width:55%; height:70%; pointer-events:auto; }
+
+  /* ===================== ORB / CONSTELLATION PANEL ===================== */
+  #memory-panel{
+    position:fixed; inset:0; z-index:40; display:flex; align-items:center; justify-content:center;
+    background: rgba(3,2,8,0.78); backdrop-filter: blur(10px);
+    opacity:0; pointer-events:none; transition: opacity 0.5s ease;
+  }
+  #memory-panel.open{ opacity:1; pointer-events:auto; }
+  #memory-card{
+    width:min(520px, 88vw); max-height:80vh; overflow:auto;
+    border:1px solid var(--ui-line); border-radius:10px;
+    background: linear-gradient(160deg, rgba(20,14,38,0.9), rgba(8,6,16,0.92));
+    padding:40px 36px; text-align:center; position:relative;
+    box-shadow: 0 0 80px rgba(167,139,250,0.15);
+    transform: scale(0.92); transition: transform 0.5s cubic-bezier(.2,.9,.25,1);
+  }
+  #memory-panel.open #memory-card{ transform:scale(1); }
+  #memory-photo{
+    width:100%; max-height:280px; object-fit:cover; border-radius:6px; margin-bottom:22px;
+    display:none; border:1px solid rgba(255,255,255,0.08);
+  }
+  #memory-text{
+    font-family:var(--font-display); font-size:25px; line-height:1.5; color:#f3eeff; font-weight:500;
+  }
+  #memory-sigil{ font-size:20px; color:var(--pink); margin-bottom:14px; letter-spacing:0.3em; }
+  #memory-close{
+    margin-top:28px; background:none; border:1px solid rgba(255,255,255,0.2); color:#cfc6f0;
+    padding:10px 26px; border-radius:30px; cursor:pointer; font-family:var(--font-mono);
+    font-size:10.5px; letter-spacing:0.16em; text-transform:uppercase; transition: all 0.25s;
+  }
+  #memory-close:hover{ border-color:var(--violet); color:#fff; background:rgba(167,139,250,0.12); }
+
+  /* ===================== FINAL SCENE TEXT ===================== */
+  #final-overlay{
+    position:fixed; inset:0; z-index:35; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; padding:0 24px;
+    pointer-events:none; opacity:0;
+  }
+  #final-message{
+    font-family:var(--font-display); font-weight:600; color:#fff8e8;
+    font-size:clamp(20px, 3.4vw, 34px); line-height:1.5; max-width:780px;
+    text-shadow: 0 0 40px rgba(251,191,36,0.4);
+    opacity:0;
+  }
+  #final-name{
+    font-family:var(--font-display); font-weight:700; color:var(--gold);
+    font-size:clamp(46px, 9vw, 110px); letter-spacing:0.02em; margin:18px 0 6px;
+    text-shadow: 0 0 60px rgba(251,191,36,0.55);
+    opacity:0;
+  }
+  #final-heart-tag{ font-size:18px; letter-spacing:0.06em; color:var(--pink); opacity:0; margin-top:4px; }
+  #final-sub{
+    font-family:var(--font-display); font-style:italic; color:#d9d0f5;
+    font-size:clamp(14px, 1.7vw, 19px); margin-top:14px; opacity:0;
+  }
+  #replay-btn{
+    margin-top:40px; pointer-events:auto; background:transparent; border:1px solid var(--gold);
+    color:#ffe9b3; padding:12px 30px; border-radius:30px; cursor:pointer;
+    font-family:var(--font-mono); font-size:11px; letter-spacing:0.16em; text-transform:uppercase;
+    opacity:0; transition: all 0.3s;
+  }
+  #replay-btn:hover{ background:var(--gold); color:#241600; }
+
+  /* sound toggle */
+  #sound-toggle{
+    position:absolute; top:16px; right:16px; z-index:21; pointer-events:auto;
+    width:34px; height:34px; border-radius:50%; border:1px solid rgba(255,255,255,0.2);
+    background:rgba(255,255,255,0.04); display:flex; align-items:center; justify-content:center;
+    cursor:pointer; font-size:14px; color:#cfc6f0;
+  }
+
+  #vignette{
+    position:fixed; inset:0; z-index:15; pointer-events:none;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+  }
+
+  @media (max-width: 760px){
+    #touch-controls{ display:block; }
+    #hud-top{ font-size:9px; }
+    #hint-bar{ display:none; }
+    #memory-card{ padding:30px 22px; }
+  }
+
+  .fade-in{ animation: fadeInUp 0.8s ease forwards; }
+  @keyframes fadeInUp{ from{ opacity:0; transform:translateY(14px);} to{ opacity:1; transform:translateY(0);} }
+
+  ::-webkit-scrollbar{ width:0; height:0; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <canvas id="scene"></canvas>
+  <div id="vignette"></div>
+
+  <!-- ===== Terminal intro ===== -->
+  <div id="terminal-screen">
+    <div id="terminal-box">
+      <div id="terminal-header"><span></span><span></span><span></span>&nbsp;&nbsp;birthday_universe — boot</div>
+      <div id="terminal-lines"></div>
+      <button id="enter-btn">Увійти у всесвіт</button>
+    </div>
+  </div>
+
+  <!-- ===== HUD ===== -->
+  <div id="hud">
+    <div id="hud-top">
+      <div id="hud-title">Всесвіт для <b id="hud-name"></b></div>
+      <div id="progress-wrap">
+        <div>Зібрано спогадів: <span id="orb-count">0</span>/<span id="orb-total">0</span></div>
+        <div id="progress-track"><div id="progress-fill"></div></div>
+      </div>
+    </div>
+    <div id="crosshair"></div>
+    <div id="core-prompt">Наблизься до ядра, щоби завершити подорож</div>
+    <div id="hint-bar">
+      <span>WASD — рух</span>
+      <span>МИША — огляд</span>
+      <span>SHIFT — прискорення</span>
+      <span>КЛІК НА ОРБ — спогад</span>
+    </div>
+  </div>
+
+  <div id="sound-toggle">♪</div>
+
+  <!-- mobile controls -->
+  <div id="touch-controls">
+    <div id="joystick-zone"><div id="joystick-knob"></div></div>
+    <div id="vlook-zone"></div>
+    <div id="boost-btn">БУСТ</div>
+  </div>
+
+  <!-- ===== Memory orb / constellation panel ===== -->
+  <div id="memory-panel">
+    <div id="memory-card">
+      <div id="memory-sigil">✦ ✧ ✦</div>
+      <img id="memory-photo" alt="" />
+      <div id="memory-text"></div>
+      <button id="memory-close">Повернутись у космос</button>
+    </div>
+  </div>
+
+  <!-- ===== Final reveal ===== -->
+  <div id="final-overlay">
+    <div id="final-message"></div>
+    <div id="final-name"></div>
+    <div id="final-heart-tag">❤ Happy Birthday ❤</div>
+    <div id="final-sub"></div>
+    <button id="replay-btn">Розпочати знову</button>
+  </div>
+</div>
+
+<script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "gsap": "https://unpkg.com/gsap@3.12.5/index.js"
+  }
+}
+</script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
